@@ -3,6 +3,7 @@
 //                   Christmas Countdown
 //                   12/2020 - by Xmow49
 //------------------------------------------------------
+//-----------Library-------------------
 #include <ESP8266WiFi.h>
 #include <time.h>
 #include <SPI.h>
@@ -13,24 +14,32 @@
 #include <Fonts/FreeSans9pt7b.h>
 #include <Fonts/FreeSans12pt7b.h>
 
+//-----------Setup Screen-------------------
 #define OLED_RESET LED_BUILTIN
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-const char *ssid = "Wifi";
-const char *password = "motdepasse";
+//-----------Wifi Settings-------------------
+const char *ssid = "Wifi1";
+const char *password = "passwd1";
 
+const char *ssid2 = "Wifi2";
+const char *password2 = "passwd2";
+
+//-----------Time Settings-------------------
 #define UTC 1
-#define goalH 0
-#define goalM 0
-#define goalS 1
 
-#define goalD 25
-#define goalMo 12
+int goalH = 0;
+int goalM = 0;
+int goalS = 1;
 
-#define textBottom "Avant Noel"
+int goalD = 25;
+int goalMo = 12;
 
+String textBottom = "Avant Noel";
+
+//-----------Pins Settings-------------------
 #define pinLED1 D3
 #define pinLED2 D4
 
@@ -38,6 +47,7 @@ int timer, timerD, timerH, timerM, timerS;
 
 void setup()
 {
+  Serial.begin(115200);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.clearDisplay();
   display.display();
@@ -48,10 +58,40 @@ void setup()
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0, 0);
-  display.println("Connexion au Wi-Fi: ");
-  display.println(ssid);
+  display.println("Scan Wi-Fi ...");
+  display.display();
 
-  WiFi.begin(ssid, password);
+  delay(200);
+  WiFi.mode(WIFI_STA);
+  int n = WiFi.scanNetworks();
+  Serial.println(n);
+  for (int i = 0; i < n; ++i)
+  {
+    if (WiFi.SSID(i) == ssid)
+    {
+      WiFi.begin(ssid, password);
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(0, 0);
+      display.println("Connexion au Wi-Fi: ");
+      display.println(ssid);
+      display.display();
+      break;
+    }
+    if (WiFi.SSID(i) == ssid2)
+    {
+      WiFi.begin(ssid2, password2);
+      display.clearDisplay();
+      display.setTextSize(1);
+      display.setTextColor(WHITE);
+      display.setCursor(0, 0);
+      display.println("Connexion au Wi-Fi: ");
+      display.println(ssid2);
+      display.display();
+      break;
+    }
+  }
   display.println("\nConnexion");
   display.display();
 
@@ -82,7 +122,6 @@ void setup()
 
   display.clearDisplay();
   display.display();
-  Serial.begin(115200);
 
   time_t now = time(nullptr);
   while (year(now) == 1970)
@@ -94,11 +133,6 @@ void setup()
     display.display();
   }
 }
-
-
-
-
-
 
 void displayTimer(int x, int y)
 {
@@ -139,51 +173,67 @@ time_t get_time_t(char *date_string)
   return (makeTime(tm));
 }
 
-
-
-
-void printText(int i)
+void printText(int i, time_t now)
 {
-  if (i == 0)
+  if (day(now) > 25 && month(now) == 12)
   {
-    display.setFont();
-    display.setCursor(30, 55);
+    if (i == 0) //Day > 1
+    {
+      display.setFont();
+      display.setCursor(5, 55);
+    }
+    else if (i == 1) //Day < 1
+    {
+      textBottom = "Nouvel An";
+      display.setFont(&FreeSans9pt7b);
+      display.setCursor(15, 60);
+    }
   }
-  else if (i == 1)
+  else
   {
-    display.setFont(&FreeSans9pt7b);
-    display.setCursor(15, 60);
+    if (i == 0) //Day > 1
+    {
+      display.setFont();
+      display.setCursor(30, 55);
+    }
+    else if (i == 1) //Day < 1
+    {
+      display.setFont(&FreeSans9pt7b);
+      display.setCursor(15, 60);
+    }
   }
   display.print(textBottom);
 }
 
-
-
-
-
 void loop()
 {
   time_t now = time(nullptr);
-
   int timerY;
   if (goalMo < month(now))
     timerY = year(now) + 1;
   else
     timerY = year(now);
 
+  if (day(now) > 25 && month(now) == 12)
+  {
+    goalD = 1;
+    goalMo = 1;
+    textBottom = "Avant le Nouvel An";
+  }
   char buff[128];
   snprintf(buff, 128, "%d.%02d.%02d %02d:%02d:%02d", timerY, goalMo, goalD, goalH, goalM, goalS);
-
   time_t goal = get_time_t(buff);
 
-  timer = goal - now;
+  time_t local = now;
+  local = now + UTC * 60 * 60;
+  now = local;
+
+  timer = goal - local;
 
   timerD = timer / 86400;
   timerH = ((timer - (timerD * 86400)) / 3600);
   timerM = (timer - ((timerD * 86400) + (timerH * 3600))) / 60;
   timerS = (timer - ((timerD * 86400) + (timerH * 3600) + (timerM * 60)));
-
-  timerH = timerH - UTC;
 
   Serial.println("-------Now:------");
   Serial.println(day(now));
@@ -220,12 +270,12 @@ void loop()
       display.print("s");
     }
     displayTimer(0, 40);
-    printText(0);
+    printText(0, now);
   }
   else if (timerD <= 0 && timerH > 0)
   {
     displayTimer(0, 30);
-    printText(1);
+    printText(1, now);
   }
   else if (timerD <= 0 && timerH <= 0)
   {
@@ -238,20 +288,29 @@ void loop()
     display.print(timerS);
     display.setFont(&FreeSans12pt7b);
     display.print("s");
-    printText(1);
-  }
-  else
-  {
+    printText(1, now);
   }
 
   if (timerD <= 0 && timerH < 0)
   {
+    if (month(now) == 12)
+    {
+      display.clearDisplay();
+      display.setFont(&FreeSans12pt7b);
+      display.setCursor(25, 25);
+      display.print("Joyeux");
+      display.setCursor(35, 55);
+      display.print("Noel !");
+    }
+  }
+  if (month(now) == 1)
+  {
     display.clearDisplay();
     display.setFont(&FreeSans12pt7b);
     display.setCursor(25, 25);
-    display.print("Joyeux");
-    display.setCursor(35, 55);
-    display.print("Noel !");
+    display.print("Bonne");
+    display.setCursor(25, 55);
+    display.print("Annee!");
   }
   display.display();
 
@@ -259,4 +318,4 @@ void loop()
   analogWrite(pinLED2, random(120, 255));
 
   delay(random(10, 100));
-} 
+}
